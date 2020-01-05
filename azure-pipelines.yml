@@ -1,0 +1,27 @@
+pool:
+  name: Hosted Ubuntu 1604
+
+trigger: none
+
+pr: none
+
+schedules:
+- cron: "0 5 * * 1-5"
+  displayName: Daily build
+  branches:
+    include:
+    - master
+  always: true
+
+steps:
+- task: Docker@0
+  displayName: 'Build an image'
+
+- task: Docker@0
+  displayName: 'Run an image'
+  inputs:
+    action: 'Run an image'
+    envVars: |
+     organisation=$(env.organisation)
+     credentials=$(env.credentials)
+    detached: false
