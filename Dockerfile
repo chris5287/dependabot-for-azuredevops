@@ -1,4 +1,4 @@
-FROM dependabot/dependabot-core:0.118.6
+FROM dependabot/dependabot-core:0.118.7
 
 # Create workspace
 RUN mkdir -p /home/dependabot/
