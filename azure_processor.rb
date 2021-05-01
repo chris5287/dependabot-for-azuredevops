@@ -48,7 +48,7 @@ class AzureProcessor
 
   def process_repo(project, repo)
     begin
-      puts "#{@organisation} => #{project[:name]} => #{repo[:name]} => Checking for Depenadbot configuration file..."
+      puts "#{@organisation} => #{project[:name]} => #{repo[:name]} => Checking for Dependabot configuration file..."
 
       response_config = get("#{@api_endpoint}/#{project[:id]}/_apis/git/repositories/#{repo[:id]}/items?path=.dependabot/config.yml")
       config = YAML.safe_load(response_config.body)
@@ -153,7 +153,7 @@ class AzureProcessor
         }
       ]
       post_patch("#{@api_endpoint}/#{project[:id]}/_apis/wit/workitems/$Bug?api-version=5.0", content.to_json)
-    end
+        end
   end
 
   def process_dependency(project, repo, dependabot_config)
@@ -180,6 +180,15 @@ class AzureProcessor
 
     directory = dependabot_config['directory']
 
+    version_requirement_updates = dependabot_config['version_requirement_updates']
+    version_requirement_updates = case version_requirement_updates
+                      when 'auto' then nil
+                      when 'widen_ranges' then 'widen_ranges'
+                      when 'increase_versions' then 'bump_versions'
+                      when 'increase_versions_if_necessary' then 'bump_versions_if_necessary'
+                      else raise "Unsupported version_requirement_updates: #{version_requirement_updates} Options: auto, widen_ranges, increase_versions or increase_versions_if_necessary"
+    end
+
     update_schedule = case dependabot_config['update_schedule']
                       when 'live' then true
                       when 'daily' then true
@@ -191,9 +200,7 @@ class AzureProcessor
     ignore_dependency_names = []
     ignored_updates = dependabot_config['ignored_updates']
     unless ignored_updates.nil?
-      ignore_dependency_names = ignored_updates.map { |rule| rule['match']['dependency_name'] }
-
-      # not supported: ignored_updates.match.version_requirement
+      ignore_dependency_names = ignored_updates.select { |rule| !rule['match'].key?("version_requirement") }.map { |rule| rule['match']['dependency_name'] }
     end
 
     automerged_dependency_names = []
@@ -207,7 +214,7 @@ class AzureProcessor
     if update_schedule == false
       puts "#{@organisation} => #{project[:name]} => #{repo[:name]} => #{package_manager} => Skipping dependency checking"
     else
-      puts "#{@organisation} => #{project[:name]} => #{repo[:name]} => #{package_manager} => Dependabot configuration { directory: #{directory}, ignore: #{ignore_dependency_names}, automerged: #{automerged_dependency_names} }"
+      puts "#{@organisation} => #{project[:name]} => #{repo[:name]} => #{package_manager} => Dependabot configuration { directory: #{directory}, ignore: #{ignore_dependency_names}, automerged: #{automerged_dependency_names}, version_requirement_updates: #{version_requirement_updates} }"
       project_repo_source = Dependabot::Source.new(
         provider: 'azure',
         repo: "#{@organisation}/#{project[:id]}/_git/#{repo[:id]}",
@@ -236,12 +243,15 @@ class AzureProcessor
           next
         end
 
-        puts "#{@organisation} => #{project[:name]} => #{repo[:name]} => #{package_manager} => #{dep.name} (#{dep.version}) => Checking for updates.."
+        ignored_versions = ignored_updates.select { |rule| match_dependency?(dep.name, [ rule['match']["dependency_name"] ]) }.map { |rule| rule['match']['version_requirement'] }
+        puts "#{@organisation} => #{project[:name]} => #{repo[:name]} => #{package_manager} => #{dep.name} (#{dep.version}) => Checking for updates.. Ignored: #{ignored_versions}"
 
         checker = Dependabot::UpdateCheckers.for_package_manager(package_manager).new(
           dependency: dep,
           dependency_files: files,
-          credentials: @available_credentials
+          credentials: @available_credentials,
+          requirements_update_strategy: version_requirement_updates,
+          ignored_versions: ignored_versions
         )
 
         # Check if the dependency is up to date.
