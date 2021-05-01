@@ -1,0 +1,16 @@
+version: 2
+updates:
+- package-ecosystem: docker
+  directory: "/"
+  schedule:
+    interval: daily
+  open-pull-requests-limit: 10
+  ignore:
+  - dependency-name: dependabot/dependabot-core
+    versions:
+    - 0.140.2
+    - 0.141.0
+    - 0.141.1
+    - 0.142.1
+    - 0.143.1
+    - 0.143.3
